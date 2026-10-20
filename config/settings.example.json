@@ -1,0 +1,14 @@
+{
+  "notifyTo": "",
+  "downloadFolder": "",
+  "toast": true,
+  "maxMessages": 1000,
+  "locations": {
+    "mailboxes": true,
+    "publicFolders": false,
+    "teams": false
+  },
+  "defaultExport": "standardPst",
+  "defaultCsv": "local",
+  "defaultPurge": "recoverable10"
+}

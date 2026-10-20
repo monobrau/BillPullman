@@ -1,0 +1,4 @@
+config/settings.json
+jobs/
+downloads/
+*.log

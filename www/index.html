@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Puller</title>
+  <style>
+    :root { font-family: Segoe UI, system-ui, sans-serif; color: #1a1a1a; background: #f4f6f8; }
+    body { margin: 0; padding: 1.5rem; max-width: 1024px; }
+    h1 { margin: 0; font-size: 1.4rem; }
+    h2 { font-size: 1.05rem; margin: 0 0 0.65rem; }
+    .card { background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    button { margin: 0.25rem 0.35rem 0.25rem 0; padding: 0.45rem 0.85rem; cursor: pointer; border-radius: 6px; border: 1px solid #8c959f; background: #f6f8fa; }
+    button.primary { background: #0969da; color: #fff; border-color: #0969da; }
+    button.danger { background: #fff; color: #cf222e; border-color: #cf222e; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input[type="text"], input[type="email"], input[type="number"], input[type="date"], textarea, select { padding: 0.35rem; width: 100%; max-width: 28rem; box-sizing: border-box; }
+    textarea { min-height: 4.5rem; }
+    label { display: block; margin: 0.45rem 0 0.15rem; font-size: 0.85rem; font-weight: 600; }
+    label.inline { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; margin-right: 1rem; }
+    .muted { color: #57606a; font-size: 0.9rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .badge { font-size: 0.78rem; font-weight: 600; padding: 0.12rem 0.45rem; border-radius: 999px; border: 1px solid #d0d7de; background: #f6f8fa; }
+    .badge.premium { border-color: #1a7f37; background: #dafbe1; color: #116329; }
+    .badge.standard { border-color: #0969da; background: #ddf4ff; color: #0550ae; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #eaeef2; vertical-align: top; }
+    .error { color: #a40e26; }
+    .hold { background: #fff8c5; border: 1px solid #bf8700; border-radius: 6px; padding: 0.65rem; margin: 0.5rem 0; }
+    details summary { cursor: pointer; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Puller</h1>
+    <p class="muted">Search Microsoft 365 mail on this machine, then preview it, save a CSV, export a PST, or delete it. The search stays until you remove it.</p>
+    <p>
+      <span id="sessionBadge" class="badge">Not signed in</span>
+      <span id="account" class="muted"></span>
+    </p>
+    <button id="connect" class="primary" type="button">Sign in</button>
+    <p id="sessionError" class="error"></p>
+  </div>
+
+  <div class="card">
+    <h2>Search</h2>
+    <p class="muted">This starts as a standard mailbox search. Customization is below, and Settings can change what a new search starts with.</p>
+    <div class="row">
+      <div>
+        <label for="sender">Sender</label>
+        <input id="sender" type="text" autocomplete="off" />
+      </div>
+      <div>
+        <label for="subject">Subject</label>
+        <input id="subject" type="text" autocomplete="off" />
+      </div>
+    </div>
+    <label for="messageId">Message ID</label>
+    <input id="messageId" type="text" autocomplete="off" />
+    <div class="row">
+      <div>
+        <label for="dateFrom">From</label>
+        <input id="dateFrom" type="date" />
+      </div>
+      <div>
+        <label for="dateTo">To</label>
+        <input id="dateTo" type="date" />
+      </div>
+    </div>
+    <label class="inline"><input id="allMailboxes" type="radio" name="mailboxMode" value="all" checked /> All mailboxes</label>
+    <label class="inline"><input id="listMailboxes" type="radio" name="mailboxMode" value="list" /> Specific mailboxes</label>
+    <label for="mailboxes">Mailbox list</label>
+    <textarea id="mailboxes" placeholder="one address per line"></textarea>
+    <details id="customize">
+      <summary>Customization</summary>
+      <label class="inline"><input id="locMailboxes" type="checkbox" /> User and shared mailboxes</label>
+      <label class="inline"><input id="locPublic" type="checkbox" /> Public folders</label>
+      <label class="inline" id="teamsWrap"><input id="locTeams" type="checkbox" /> Teams messages</label>
+      <p id="teamsNote" class="muted">A Teams purge is permanent, even when mailbox delete is recoverable.</p>
+      <label for="rawQuery">Raw query</label>
+      <textarea id="rawQuery"></textarea>
+      <label for="exportChoice">Export</label>
+      <select id="exportChoice"></select>
+      <label for="csvChoice">CSV</label>
+      <select id="csvChoice"></select>
+      <label for="purgeChoice">Delete</label>
+      <select id="purgeChoice"></select>
+      <p id="choiceNotes" class="muted"></p>
+    </details>
+    <p><button id="search" class="primary" type="button" disabled>Search</button></p>
+    <p id="formError" class="error"></p>
+  </div>
+
+  <div class="card">
+    <h2>This search</h2>
+    <p id="jobSummary" class="muted">No search yet.</p>
+    <p id="jobError" class="error"></p>
+    <p id="jobDetail" class="muted"></p>
+    <div id="holdBox" class="hold" hidden></div>
+    <table>
+      <thead><tr><th>Mailbox</th><th>Sender</th><th>Subject</th><th>Received</th><th>Message ID</th></tr></thead>
+      <tbody id="previewBody"></tbody>
+    </table>
+    <p>
+      <button id="preview" type="button" disabled>Preview</button>
+      <button id="csv" type="button" disabled>Save CSV</button>
+      <button id="export" type="button" disabled>Export PST</button>
+    </p>
+    <label for="confirmName">Type the search name to delete</label>
+    <input id="confirmName" type="text" autocomplete="off" />
+    <label class="inline"><input id="permanent" type="checkbox" /> Permanent delete</label>
+    <p>
+      <button id="purge" class="danger" type="button" disabled>Delete matching mail</button>
+      <button id="remove" type="button" disabled>Remove search</button>
+    </p>
+    <ul id="files"></ul>
+  </div>
+
+  <div class="card">
+    <h2>Recent searches</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Status</th><th>Items</th><th></th></tr></thead>
+      <tbody id="jobList"></tbody>
+    </table>
+  </div>
+
+  <details class="card">
+    <summary>Settings</summary>
+    <p class="muted">These change the starting choices for the next search. A choice the current tenant cannot use falls back to the standard one.</p>
+    <label for="notifyTo">Alert email</label>
+    <input id="notifyTo" type="email" />
+    <label for="downloadFolder">Download folder</label>
+    <input id="downloadFolder" type="text" />
+    <label for="maxMessages">Message cap for a Standard PST</label>
+    <input id="maxMessages" type="number" min="1" />
+    <label class="inline"><input id="toast" type="checkbox" /> Windows toast</label>
+    <p><button id="saveSettings" type="button">Save settings</button></p>
+    <p id="settingsNote" class="muted"></p>
+  </details>
+
+  <script>
+    var session = null;
+    var job = null;
+    var poll = null;
+    var holdAck = false;
+
+    function $(id) { return document.getElementById(id); }
+
+    function api(path, method, body) {
+      var opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+      if (body) opts.body = JSON.stringify(body);
+      return fetch(path, opts).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error(data.error || res.statusText);
+          return data;
+        });
+      });
+    }
+
+    function fillSelect(select, options, selected) {
+      select.innerHTML = '';
+      options.forEach(function (opt) {
+        var node = document.createElement('option');
+        node.value = opt.value;
+        node.textContent = opt.label;
+        if (opt.value === selected) node.selected = true;
+        select.appendChild(node);
+      });
+    }
+
+    function applySession(data) {
+      session = data;
+      var badge = $('sessionBadge');
+      $('account').textContent = data.account ? (data.account + (data.tenantId ? ' · ' + data.tenantId : '')) : '';
+      $('search').disabled = !data.connected;
+      if (!data.connected) {
+        badge.textContent = 'Not signed in';
+        badge.className = 'badge';
+      } else if (data.tier === 'premium') {
+        badge.textContent = data.label || 'Premium';
+        badge.className = 'badge premium';
+      } else {
+        badge.textContent = data.label || 'Standard';
+        badge.className = 'badge standard';
+      }
+      var choices = data.choices || {};
+      var allowed = choices.allowed || {};
+      $('locMailboxes').checked = !!(choices.locations && choices.locations.mailboxes);
+      $('locPublic').checked = !!(choices.locations && choices.locations.publicFolders);
+      $('locTeams').checked = !!(choices.locations && choices.locations.teams);
+      $('teamsWrap').style.display = allowed.teams ? '' : 'none';
+      $('teamsNote').style.display = allowed.teams ? '' : 'none';
+      var exports = [{ value: 'standardPst', label: 'Standard PST' }];
+      if (allowed.purviewPst) exports.push({ value: 'purviewPst', label: 'Purview PST' });
+      fillSelect($('exportChoice'), exports, choices.defaultExport);
+      var csvs = [{ value: 'local', label: 'Local metadata CSV' }];
+      if (allowed.purviewReport) csvs.push({ value: 'purviewReport', label: 'Purview report' });
+      fillSelect($('csvChoice'), csvs, choices.defaultCsv);
+      var purges = [{ value: 'recoverable10', label: 'Recoverable, 10 per mailbox' }];
+      if (allowed.premium100) purges.push({ value: 'premium100', label: 'Premium, 100 per location' });
+      fillSelect($('purgeChoice'), purges, choices.defaultPurge);
+      $('choiceNotes').textContent = (choices.notes || []).join(' ');
+      var settings = data.settings || {};
+      $('notifyTo').value = settings.notifyTo || '';
+      $('downloadFolder').value = settings.downloadFolder || '';
+      $('maxMessages').value = settings.maxMessages || 1000;
+      $('toast').checked = settings.toast !== false;
+    }
+
+    function renderJob(next) {
+      job = next;
+      if (!job) return;
+      $('jobSummary').textContent = job.name + ' · ' + job.status + ' · items ' + (job.items || 0) + (job.query ? ' · ' + job.query : '');
+      $('jobError').textContent = job.error || '';
+      $('jobDetail').textContent = job.detail || '';
+      var body = $('previewBody');
+      body.innerHTML = '';
+      (job.preview || []).forEach(function (row) {
+        var tr = document.createElement('tr');
+        [row.mailbox, row.sender, row.subject, row.received, row.messageId || row.error || ''].forEach(function (cell) {
+          var td = document.createElement('td');
+          td.textContent = cell || '';
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+      var files = $('files');
+      files.innerHTML = '';
+      (job.files || []).forEach(function (file) {
+        var li = document.createElement('li');
+        li.textContent = file;
+        files.appendChild(li);
+      });
+      var ready = job.status === 'completed' || job.status === 'exported' || job.status === 'purged';
+      $('preview').disabled = !ready && job.status !== 'completed';
+      $('preview').disabled = job.status === 'running' || job.status === 'removed';
+      $('csv').disabled = $('preview').disabled;
+      $('export').disabled = $('preview').disabled;
+      $('purge').disabled = $('preview').disabled;
+      $('remove').disabled = job.status === 'removed';
+      var holdBox = $('holdBox');
+      if (job.holds && job.holds.length) {
+        holdBox.hidden = false;
+        holdBox.textContent = job.holds.map(function (hold) {
+          return hold.mailbox + ': ' + (hold.holds || []).join(', ');
+        }).join(' · ');
+      } else {
+        holdBox.hidden = true;
+        holdBox.textContent = '';
+      }
+      if (job.status === 'running' || job.status === 'exporting') startPoll();
+      else stopPoll();
+    }
+
+    function startPoll() {
+      if (poll || !job) return;
+      poll = setInterval(function () {
+        api('/api/jobs/' + job.id).then(renderJob).catch(function (err) { $('jobError').textContent = err.message; });
+      }, 2000);
+    }
+    function stopPoll() {
+      if (poll) clearInterval(poll);
+      poll = null;
+    }
+
+    function loadJobs() {
+      api('/api/jobs').then(function (data) {
+        var body = $('jobList');
+        body.innerHTML = '';
+        (data.jobs || []).forEach(function (item) {
+          var tr = document.createElement('tr');
+          [item.name, item.status, item.items].forEach(function (cell) {
+            var td = document.createElement('td');
+            td.textContent = cell == null ? '' : String(cell);
+            tr.appendChild(td);
+          });
+          var td = document.createElement('td');
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = 'Open';
+          button.addEventListener('click', function () {
+            api('/api/jobs/' + item.id).then(renderJob).catch(function (err) { $('jobError').textContent = err.message; });
+          });
+          td.appendChild(button);
+          tr.appendChild(td);
+          body.appendChild(tr);
+        });
+      }).catch(function () {});
+    }
+
+    function searchBody() {
+      return {
+        sender: $('sender').value,
+        subject: $('subject').value,
+        messageId: $('messageId').value,
+        dateFrom: $('dateFrom').value,
+        dateTo: $('dateTo').value,
+        mailboxMode: $('listMailboxes').checked ? 'list' : 'all',
+        mailboxes: $('mailboxes').value,
+        rawQuery: $('rawQuery').value,
+        locations: {
+          mailboxes: $('locMailboxes').checked,
+          publicFolders: $('locPublic').checked,
+          teams: $('locTeams').checked
+        },
+        defaultExport: $('exportChoice').value,
+        defaultCsv: $('csvChoice').value,
+        defaultPurge: $('purgeChoice').value
+      };
+    }
+
+    $('connect').addEventListener('click', function () {
+      $('connect').disabled = true;
+      $('sessionError').textContent = 'Waiting for the sign-in windows on this machine.';
+      api('/api/connect', 'POST', {}).then(function (data) {
+        $('sessionError').textContent = '';
+        applySession(data);
+      }).catch(function (err) {
+        $('sessionError').textContent = err.message;
+      }).then(function () { $('connect').disabled = false; });
+    });
+
+    $('search').addEventListener('click', function () {
+      $('formError').textContent = '';
+      holdAck = false;
+      api('/api/search', 'POST', searchBody()).then(function (data) {
+        renderJob(data);
+        loadJobs();
+      }).catch(function (err) { $('formError').textContent = err.message; });
+    });
+
+    $('preview').addEventListener('click', function () {
+      api('/api/jobs/' + job.id + '/preview', 'POST', {}).then(renderJob).catch(function (err) { $('jobError').textContent = err.message; });
+    });
+    $('csv').addEventListener('click', function () {
+      api('/api/jobs/' + job.id + '/csv', 'POST', {}).then(renderJob).catch(function (err) { $('jobError').textContent = err.message; });
+    });
+    $('export').addEventListener('click', function () {
+      api('/api/jobs/' + job.id + '/export', 'POST', {}).then(renderJob).catch(function (err) { $('jobError').textContent = err.message; });
+    });
+    $('purge').addEventListener('click', function () {
+      api('/api/jobs/' + job.id + '/purge', 'POST', {
+        searchNameConfirm: $('confirmName').value,
+        permanent: $('permanent').checked,
+        acknowledgeHolds: holdAck
+      }).then(function (data) {
+        var next = data.job || data;
+        if (data.needsHoldAck) holdAck = true;
+        renderJob(next);
+      }).catch(function (err) { $('jobError').textContent = err.message; });
+    });
+    $('remove').addEventListener('click', function () {
+      api('/api/jobs/' + job.id + '/remove', 'POST', {}).then(function (data) {
+        renderJob(data);
+        loadJobs();
+      }).catch(function (err) { $('jobError').textContent = err.message; });
+    });
+
+    $('saveSettings').addEventListener('click', function () {
+      api('/api/settings', 'POST', {
+        notifyTo: $('notifyTo').value,
+        downloadFolder: $('downloadFolder').value,
+        maxMessages: Number($('maxMessages').value || 1000),
+        toast: $('toast').checked,
+        locations: {
+          mailboxes: $('locMailboxes').checked,
+          publicFolders: $('locPublic').checked,
+          teams: $('locTeams').checked
+        },
+        defaultExport: $('exportChoice').value,
+        defaultCsv: $('csvChoice').value,
+        defaultPurge: $('purgeChoice').value
+      }).then(function (data) {
+        applySession(data);
+        $('settingsNote').textContent = 'Settings saved. The next search uses them.';
+      }).catch(function (err) { $('settingsNote').textContent = err.message; });
+    });
+
+    api('/api/session').then(applySession).catch(function (err) { $('sessionError').textContent = err.message; });
+    loadJobs();
+  </script>
+</body>
+</html>
